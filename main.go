@@ -42,19 +42,42 @@ func main() {
 	// логика сообщения
 	for update := range updates {
 		if update.Message != nil {
-
 			chatID := update.Message.Chat.ID
+			text := update.Message.Text
 
-			responseText := fmt.Sprintf(update.Message.Text)
+			// Обработка команды /start
+			if text == "/start" {
+				// Создание клавиатуры
+				keyboard := tu.Keyboard(
+					tu.KeyboardRow(
+						tu.KeyboardButton("Показать расписание"),
+					),
+				)
 
-			sentMessage, _ := bot.SendMessage(
-				tu.Message(
-					tu.ID(chatID),
-					responseText,
-				),
-			)
+				// Отправка сообщения с клавиатурой
+				_, _ = bot.SendMessage(
+					tu.Message(
+						tu.ID(chatID),
+						"Добро пожаловать! Выберите опцию:",
+					).WithReplyMarkup(keyboard),
+				)
+				continue
+			}
 
-			fmt.Printf("Sent Message: %v\n", sentMessage)
+			// Обработка нажатия кнопки "Показать расписание"
+			if text == "Показать расписание" {
+				responseText := "Вот ваше расписание: ..." // Здесь добавьте логику для отображения расписания
+
+				// Отправка расписания
+				_, _ = bot.SendMessage(
+					tu.Message(
+						tu.ID(chatID),
+						responseText,
+					),
+				)
+				continue
+			}
+
 		}
 	}
 }
