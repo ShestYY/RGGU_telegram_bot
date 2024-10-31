@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -9,14 +11,15 @@ import (
 	tu "github.com/mymmrac/telego/telegoutil"
 )
 
+// переменная для отслеживания активности бота
+var isActive bool
+
 func main() {
-	// Загрузка переменных окружения с токеном
 	err := godotenv.Load("go.env")
 	if err != nil {
 		fmt.Println("Ошибка загрузки файла .env")
 		return
 	}
-	// загрузка токена
 	botToken := os.Getenv("TOKEN")
 	bot, err := telego.NewBot(botToken, telego.WithDefaultDebugLogger())
 	if err != nil {
@@ -24,9 +27,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Установка вебхука
 	_ = bot.SetWebhook(&telego.SetWebhookParams{
-		URL: "https://468d-95-165-158-59.ngrok-free.app/bot/" + bot.Token(),
+		URL: "https://ec1e-95-165-158-59.ngrok-free.app/bot/" + bot.Token(),
 	})
 
 	updates, _ := bot.UpdatesViaWebhook("/bot/" + bot.Token())
@@ -39,22 +41,19 @@ func main() {
 		_ = bot.StopWebhook()
 	}()
 
-	// логика сообщения
 	for update := range updates {
 		if update.Message != nil {
 			chatID := update.Message.Chat.ID
 			text := update.Message.Text
 
-			// Обработка команды /start
 			if text == "/start" {
-				// Создание клавиатуры
+				isActive = true // Активируем бота
 				keyboard := tu.Keyboard(
 					tu.KeyboardRow(
 						tu.KeyboardButton("Показать расписание"),
 					),
 				)
 
-				// Отправка сообщения с клавиатурой
 				_, _ = bot.SendMessage(
 					tu.Message(
 						tu.ID(chatID),
@@ -64,20 +63,98 @@ func main() {
 				continue
 			}
 
-			// Обработка нажатия кнопки "Показать расписание"
-			if text == "Показать расписание" {
-				responseText := "Вот ваше расписание: ..." // Здесь добавьте логику для отображения расписания
+			// Проверяем, активен ли бот
+			if !isActive {
+				continue
+			}
 
-				// Отправка расписания
+			if text == "Показать расписание" {
+				keyboard2 := tu.Keyboard(
+					tu.KeyboardRow(
+						tu.KeyboardButton("сегодня-завтра"),
+					),
+					tu.KeyboardRow(
+						tu.KeyboardButton("неделя"),
+					),
+					tu.KeyboardRow(
+						tu.KeyboardButton("семестр"),
+					),
+				)
+
+				_, _ = bot.SendMessage(
+					tu.Message(
+						tu.ID(chatID),
+						"На какой период нужно показать расписание?",
+					).WithReplyMarkup(keyboard2.WithIsPersistent()),
+				)
+				continue
+			}
+
+			if text == "сегодня-завтра" {
+				isActive = false
+				parse()
+				responseText := "da"
+
 				_, _ = bot.SendMessage(
 					tu.Message(
 						tu.ID(chatID),
 						responseText,
 					),
 				)
+
 				continue
 			}
 
+			if text == "неделя" {
+				isActive = false
+				parse()
+				responseText := "da"
+
+				_, _ = bot.SendMessage(
+					tu.Message(
+						tu.ID(chatID),
+						responseText,
+					),
+				)
+
+				continue
+			}
+
+			if text == "семестр" {
+				isActive = false
+				parse()
+				responseText := "da"
+
+				_, _ = bot.SendMessage(
+					tu.Message(
+						tu.ID(chatID),
+						responseText,
+					),
+				)
+
+				continue
+			}
 		}
 	}
+}
+
+func parse() {
+
+	getURL := "https://functions.yandexcloud.net/d4e3jfkud94j5ovcurg2?method=/proxy/timetables&group_id=%D0%98%D0%9F_%D0%9F%D0%9F%D0%9E_%D0%9F%D0%9F%D0%9A%20(%D0%93%D1%80%D1%83%D0%BF%D0%BF%D0%B0:%201)%20[%D0%94:4]"
+
+	resp, err := http.Get(getURL)
+	if err != nil {
+		fmt.Println("Ошибка при отправке запроса:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Ошибка при чтении ответа:", err)
+		return
+	}
+
+	fmt.Println("Статус код:", resp.Status)
+	fmt.Println("Ответ:", string(body))
 }
