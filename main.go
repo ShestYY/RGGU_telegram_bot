@@ -1,18 +1,47 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 )
 
-// переменная для отслеживания активности бота
-var isActive bool
+// Глобальная переменная для хранения расписания
+var raspisanie []Raspisanie
+
+type Raspisanie struct {
+	WeekDay   string `json:"week_day"`
+	Nomerpari int    `json:"number"`
+	Date      string `json:"date"`
+	Kabinet   string `json:"cabinet_name"`
+	Para      string `json:"name"`
+	Type      string `json:"type"`
+	Prepod    string `json:"teacher_name"`
+	GroupID   string `json:"group_id"`
+	ID        string `json:"id"`
+}
+
+var weekDays = map[int]string{
+	0: "Воскресенье",
+	1: "Понедельник",
+	2: "Вторник",
+	3: "Среда",
+	4: "Четверг",
+	5: "Пятница",
+	6: "Суббота",
+}
+
+type ApiResponse struct {
+	Status string       `json:"status"`
+	Data   []Raspisanie `json:"data"`
+}
 
 func main() {
 	err := godotenv.Load("go.env")
@@ -47,7 +76,6 @@ func main() {
 			text := update.Message.Text
 
 			if text == "/start" {
-				isActive = true // Активируем бота
 				keyboard := tu.Keyboard(
 					tu.KeyboardRow(
 						tu.KeyboardButton("Показать расписание"),
@@ -63,21 +91,16 @@ func main() {
 				continue
 			}
 
-			// Проверяем, активен ли бот
-			if !isActive {
-				continue
-			}
-
 			if text == "Показать расписание" {
 				keyboard2 := tu.Keyboard(
 					tu.KeyboardRow(
 						tu.KeyboardButton("сегодня-завтра"),
 					),
 					tu.KeyboardRow(
-						tu.KeyboardButton("неделя"),
+						tu.KeyboardButton("текущая неделя"),
 					),
 					tu.KeyboardRow(
-						tu.KeyboardButton("семестр"),
+						tu.KeyboardButton("следующая неделя"),
 					),
 				)
 
@@ -91,10 +114,9 @@ func main() {
 			}
 
 			if text == "сегодня-завтра" {
-				isActive = false
-				parse()
-				responseText := "da"
 
+				parse() // Запрашиваем расписание
+				responseText := getTodayTomorrowSchedule()
 				_, _ = bot.SendMessage(
 					tu.Message(
 						tu.ID(chatID),
@@ -105,11 +127,10 @@ func main() {
 				continue
 			}
 
-			if text == "неделя" {
-				isActive = false
-				parse()
-				responseText := "da"
+			if text == "текущая неделя" {
 
+				parse() // Запрашиваем расписание
+				responseText := getThisWeekSchedule()
 				_, _ = bot.SendMessage(
 					tu.Message(
 						tu.ID(chatID),
@@ -120,11 +141,10 @@ func main() {
 				continue
 			}
 
-			if text == "семестр" {
-				isActive = false
-				parse()
-				responseText := "da"
+			if text == "следующая неделя" {
 
+				parse() // Запрашиваем расписание
+				responseText := getNextWeekSchedule()
 				_, _ = bot.SendMessage(
 					tu.Message(
 						tu.ID(chatID),
@@ -139,7 +159,6 @@ func main() {
 }
 
 func parse() {
-
 	getURL := "https://functions.yandexcloud.net/d4e3jfkud94j5ovcurg2?method=/proxy/timetables&group_id=%D0%98%D0%9F_%D0%9F%D0%9F%D0%9E_%D0%9F%D0%9F%D0%9A%20(%D0%93%D1%80%D1%83%D0%BF%D0%BF%D0%B0:%201)%20[%D0%94:4]"
 
 	resp, err := http.Get(getURL)
@@ -157,4 +176,117 @@ func parse() {
 
 	fmt.Println("Статус код:", resp.Status)
 	fmt.Println("Ответ:", string(body))
+
+	var apiResponse ApiResponse
+	err = json.Unmarshal(body, &apiResponse)
+	if err != nil {
+		fmt.Println("Ошибка при декодировании JSON:", err)
+		return
+	}
+
+	raspisanie = apiResponse.Data
+}
+
+func getTodayTomorrowSchedule() string {
+	var responseText string
+	today := time.Now()
+	tomorrow := today.AddDate(0, 0, 1)
+
+	responseText += "\n" // Добавляем новую строку в начале ответа
+
+	for _, item := range raspisanie {
+		// Преобразуем строку даты в time.Time
+		date, err := time.Parse("2006-01-02T15:04:05.000000Z", item.Date)
+		if err != nil {
+			fmt.Println("Ошибка при парсинге даты:", err)
+			continue
+		}
+
+		// Проверяем, попадает ли дата в сегодня или завтра
+		if (date.Year() == today.Year() && date.YearDay() == today.YearDay()) ||
+			(date.Year() == tomorrow.Year() && date.YearDay() == tomorrow.YearDay()) {
+
+			// Получаем день недели и форматируем дату
+			weekdayName := weekDays[int(date.Weekday())]
+			formattedDate := date.Format("2006-01-02")
+
+			responseText += fmt.Sprintf("\n%s\n %d Пара \nДата: %s\nКабинет: %s\nПара: %s\nТип: %s\nПреподаватель: %s\n\n",
+				weekdayName, item.Nomerpari, formattedDate, item.Kabinet, item.Para, item.Type, item.Prepod)
+		}
+	}
+
+	if responseText == "\n" {
+		responseText = "Нет расписания на сегодня или завтра."
+	}
+	return responseText
+}
+
+func getThisWeekSchedule() string {
+	var responseText string
+
+	// Определяем начало и конец текущей недели
+	today := time.Now()
+	weekday := int(today.Weekday())
+	startOfWeek := today.AddDate(0, 0, -weekday+1) // Понедельник текущей недели
+	endOfWeek := startOfWeek.AddDate(0, 0, 6)      // Воскресенье текущей недели
+
+	responseText += "\n" // Начинаем с новой строки
+
+	for _, item := range raspisanie {
+		// Преобразуем строку даты в time.Time
+		date, err := time.Parse("2006-01-02T15:04:05.000000Z", item.Date)
+		if err != nil {
+			fmt.Println("Ошибка при парсинге даты:", err)
+			continue
+		}
+
+		// Проверяем, попадает ли дата в текущую неделю
+		if date.After(startOfWeek.Add(-time.Second)) && date.Before(endOfWeek.Add(24*time.Hour)) {
+			weekdayName := weekDays[int(date.Weekday())]
+			formattedDate := date.Format("2006-01-02")
+
+			responseText += fmt.Sprintf("День: %s\n %d Пара \nДата: %s\nКабинет: %s\nПара: %s\nТип: %s\nПреподаватель: %s\n\n",
+				weekdayName, item.Nomerpari, formattedDate, item.Kabinet, item.Para, item.Type, item.Prepod)
+		}
+	}
+
+	if responseText == "\n" {
+		responseText = "Нет расписания на текущую неделю."
+	}
+	return responseText
+}
+
+func getNextWeekSchedule() string {
+	var responseText string
+
+	// Определяем начало и конец следующей недели
+	today := time.Now()
+	weekday := int(today.Weekday())
+	startOfNextWeek := today.AddDate(0, 0, -weekday+8) // Понедельник следующей недели
+	endOfNextWeek := startOfNextWeek.AddDate(0, 0, 6)  // Воскресенье следующей недели
+
+	responseText += "\n" // Начинаем с новой строки
+
+	for _, item := range raspisanie {
+		// Преобразуем строку даты в time.Time
+		date, err := time.Parse("2006-01-02T15:04:05.000000Z", item.Date)
+		if err != nil {
+			fmt.Println("Ошибка при парсинге даты:", err)
+			continue
+		}
+
+		// Проверяем, попадает ли дата в следующую неделю
+		if date.After(startOfNextWeek.Add(-time.Second)) && date.Before(endOfNextWeek.Add(24*time.Hour)) {
+			weekdayName := weekDays[int(date.Weekday())]
+			formattedDate := date.Format("2006-01-02")
+
+			responseText += fmt.Sprintf("День: %s\n%d Пара \nДата: %s\nКабинет: %s\nПара: %s\nТип: %s\nПреподаватель: %s\n\n",
+				weekdayName, item.Nomerpari, formattedDate, item.Kabinet, item.Para, item.Type, item.Prepod)
+		}
+	}
+
+	if responseText == "\n" {
+		responseText = "Нет расписания на следующую неделю."
+	}
+	return responseText
 }
