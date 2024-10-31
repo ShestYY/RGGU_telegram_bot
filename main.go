@@ -159,7 +159,7 @@ func main() {
 }
 
 func parse() {
-	getURL := "https://functions.yandexcloud.net/d4e3jfkud94j5ovcurg2?method=/proxy/timetables&group_id=%D0%98%D0%9F_%D0%9F%D0%9F%D0%9E_%D0%9F%D0%9F%D0%9A%20(%D0%93%D1%80%D1%83%D0%BF%D0%BF%D0%B0:%201)%20[%D0%94:4]"
+	getURL := "https://functions.yandexcloud.net/d4e3jfkud94j5ovcurg2?method=/proxy/timetables&group_id=%D0%98%D0%9F_%D0%9F%D0%9F%D0%9E_%D0%9F%D0%9F%D0%9A%20(%D0%93%D1%80%D1%83%D0%BF%D0%BF%D0%B0:%201)%20[%D0%94:3]"
 
 	resp, err := http.Get(getURL)
 	if err != nil {
